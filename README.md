@@ -18,8 +18,7 @@ A lightweight Intrusion Detection System (IDS) optimized for real-time operation
 - **UID-based merging:** Joins related events across log types using connection UIDs
 - **Lightweight dashboard:** Flask server displaying live alerts from alerts.csv
 - **Edge optimized:** Efficiently runs on Raspberry Pi 4 (4GB) with low latency
-- **Offline operation:** Works without internet connectivity once setup is complete
-
+  
 ## Requirements
 
 ### Hardware
@@ -117,6 +116,28 @@ python3 app.py --csv alerts.csv --host 0.0.0.0 --port 8000
 ```
 
 Access at: `http://localhost:8000`
+
+## Testing the IDS
+### To generate network traffic and test the IDS detection capabilities, you can run network scanning tools against the Raspberry Pi from another machine on the network.
+Using Nmap
+Run a comprehensive scan to generate various log entries:
+bashnmap -sS -sV -O -A -p- <raspberrypi_ip>
+This command performs:
+
+-sS: TCP SYN scan (stealth scan)
+-sV: Service version detection
+-O: OS detection
+-A: Aggressive scan (enables OS detection, version detection, script scanning, and traceroute)
+-p-: Scan all 65535 ports
+
+### Using Nessus
+Run a vulnerability scan using Nessus by:
+
+Adding the Raspberry Pi IP address as a target
+Running a basic or advanced network scan
+Monitor the IDS dashboard for detected scanning activity
+
+Both tools will generate significant network traffic that Zeek will capture and the IDS will classify, allowing you to observe detection of scanning, potential vulnerabilities, and other network anomalies in real-time.
 
 ## Model Details
 
