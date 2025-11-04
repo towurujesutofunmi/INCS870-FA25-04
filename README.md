@@ -118,24 +118,30 @@ python3 app.py --csv alerts.csv --host 0.0.0.0 --port 8000
 Access at: `http://localhost:8000`
 
 ## Testing the IDS
-### To generate network traffic and test the IDS detection capabilities, you can run network scanning tools against the Raspberry Pi from another machine on the network.
-Using Nmap
-Run a comprehensive scan to generate various log entries:
-bashnmap -sS -sV -O -A -p- <raspberrypi_ip>
-This command performs:
 
--sS: TCP SYN scan (stealth scan)
--sV: Service version detection
--O: OS detection
--A: Aggressive scan (enables OS detection, version detection, script scanning, and traceroute)
--p-: Scan all 65535 ports
+To generate network traffic and test the IDS detection capabilities, you can run network scanning tools against the Raspberry Pi from another machine on the network.
+
+### Using Nmap
+
+Run a comprehensive scan to generate various log entries:
+
+```bash
+nmap -sS -sV -O -A -p- <raspberrypi_ip>
+```
+
+This command performs:
+- `-sS`: TCP SYN scan (stealth scan)
+- `-sV`: Service version detection
+- `-O`: OS detection
+- `-A`: Aggressive scan (enables OS detection, version detection, script scanning, and traceroute)
+- `-p-`: Scan all 65535 ports
 
 ### Using Nessus
-Run a vulnerability scan using Nessus by:
 
-Adding the Raspberry Pi IP address as a target
-Running a basic or advanced network scan
-Monitor the IDS dashboard for detected scanning activity
+Run a vulnerability scan using Nessus by:
+1. Adding the Raspberry Pi IP address as a target
+2. Running a basic or advanced network scan
+3. Monitor the IDS dashboard for detected scanning activity
 
 Both tools will generate significant network traffic that Zeek will capture and the IDS will classify, allowing you to observe detection of scanning, potential vulnerabilities, and other network anomalies in real-time.
 
@@ -167,3 +173,5 @@ The system uses an XGBoost multiclass model trained on 35 key features from the 
 | Dashboard blank | Wait for first predictions or check Zeek log paths |
 | CPU spikes | Increase `--batch-size` (e.g., 2048) |
 | Permission denied | Run with `sudo` or adjust file permissions |
+
+
