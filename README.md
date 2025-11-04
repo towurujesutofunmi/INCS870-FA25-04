@@ -146,7 +146,3 @@ The system uses an XGBoost multiclass model trained on 35 key features from the 
 | Dashboard blank | Wait for first predictions or check Zeek log paths |
 | CPU spikes | Increase `--batch-size` (e.g., 2048) |
 | Permission denied | Run with `sudo` or adjust file permissions |
-
-## License
-
-MIT License
