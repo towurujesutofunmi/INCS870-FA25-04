@@ -22,7 +22,7 @@ A lightweight Intrusion Detection System (IDS) optimized for real-time operation
 ## Requirements
 
 ### Hardware
-- Raspberry Pi 4 (recommended) or Pi 3B+
+- Raspberry Pi 4 (recommended) 
 - Minimum 2 GB RAM
 - Raspbian Bullseye or later
 
