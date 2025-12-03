@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IoT IDS Alerts</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<header class="bg-white shadow-sm">
+  <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+    <h1 class="text-2xl font-bold text-gray-800">IoT IDS Alerts</h1>
+    <div class="text-sm text-gray-600">
+      <span id="current-time">-</span>
+    </div>
+  </div>
+</header>
+
+<main class="container mx-auto px-4 py-6">
+  <!-- Controls -->
+  <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Class</label>
+      <select id="class-filter" class="border rounded px-2 py-1 text-sm">
+        <option value="__all__">All classes</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Min probability</label>
+      <input id="prob-filter" type="range" min="0" max="1" step="0.01" value="0.50" class="w-40">
+      <span id="prob-val" class="text-sm ml-2">0.50</span>
+    </div>
+    <div class="flex-1 min-w-[200px]">
+      <label class="block text-xs text-gray-500 mb-1">Search (UID/IP/proto/srcfile)</label>
+      <input id="search-filter" type="text" placeholder="e.g. 192.168.1.10 or CExxxxx"
+             class="border rounded px-2 py-1 w-full text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">API limit</label>
+      <input id="limit" type="number" min="100" max="100000" step="100" value="2000"
+             class="border rounded px-2 py-1 w-28 text-sm">
+    </div>
+    <div class="ml-auto flex gap-2">
+      <button id="refresh-btn" class="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200">Refresh</button>
+      <button id="clear-btn" class="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200">Clear filters</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+    <div class="bg-white rounded-lg shadow p-4">
+      <h3 class="text-gray-500 text-sm font-medium">Rows (after filters)</h3>
+      <p id="kpi-rows" class="text-2xl font-bold">0</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+      <h3 class="text-gray-500 text-sm font-medium">Latest ts</h3>
+      <p id="kpi-latest" class="text-2xl font-bold">-</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+      <h3 class="text-gray-500 text-sm font-medium">CSV size</h3>
+      <p id="kpi-size" class="text-2xl font-bold">-</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+      <h3 class="text-gray-500 text-sm font-medium">Last updated</h3>
+      <p id="kpi-updated" class="text-2xl font-bold">-</p>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+      <h2 class="text-lg font-semibold">Recent Predictions</h2>
+      <span id="file-meta" class="text-xs text-gray-500"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prediction</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prob</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">UID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Src</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dst</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Proto/Service</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Src file</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody" class="bg-white divide-y divide-gray-200"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<footer class="bg-white border-t border-gray-200 py-4 mt-6">
+  <div class="container mx-auto px-4 text-center text-sm text-gray-500">
+    Raspberry Pi IoT IDS Dashboard (no charts)
+  </div>
+</footer>
+
+<script>
+  const REFRESH_MS = 2000;
+  let allRows = [];
+
+  const el = id => document.getElementById(id);
+  function fmtTime(tsSec) {
+    if (tsSec == null) return "-";
+    const d = new Date(tsSec * 1000);
+    return isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  }
+  function pick(row, keys) {
+    for (const k of keys) {
+      if (row[k] != null && row[k] !== "") return String(row[k]);
+    }
+    return "-";
+  }
+  function srcText(r) {
+    const ip = pick(r, ["id.orig_h","orig_h","src_ip"]);
+    const p  = pick(r, ["id.orig_p","orig_p","src_port"]);
+    return ip === "-" ? "-" : (p === "-" ? ip : ip + ":" + p);
+  }
+  function dstText(r) {
+    const ip = pick(r, ["id.resp_h","resp_h","dst_ip"]);
+    const p  = pick(r, ["id.resp_p","resp_p","dst_port"]);
+    return ip === "-" ? "-" : (p === "-" ? ip : ip + ":" + p);
+  }
+  function protoText(r) {
+    const pr = pick(r, ["proto"]).toUpperCase();
+    const svc = pick(r, ["service"]);
+    return svc === "-" ? pr : (pr ? pr + "/" + svc : svc);
+  }
+  function filesize(bytes) {
+    if (!bytes && bytes !== 0) return "-";
+    const units = ["B","KB","MB","GB"];
+    let i = 0, n = Number(bytes);
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return n.toFixed(1) + " " + units[i];
+  }
+
+  async function fetchAlerts() {
+    const limit = Number(el("limit").value) || 2000;
+    const r = await fetch(`/api/alerts?limit=${limit}&t=${Date.now()}`, { cache: "no-store" });
+    const j = await r.json();
+    allRows = (j.rows || []).map(row => {
+      // ensure numeric
+      row.pred_prob = (typeof row.pred_prob === "string") ? parseFloat(row.pred_prob) : row.pred_prob;
+      row.ts = (typeof row.ts === "string") ? parseFloat(row.ts) : row.ts;
+      return row;
+    });
+
+    // fill class dropdown once (or update if new):
+    const clsSel = el("class-filter");
+    const existing = new Set(Array.from(clsSel.options).map(o => o.value));
+    (j.classes || []).forEach(c => {
+      if (!existing.has(c)) {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        clsSel.appendChild(opt);
+      }
+    });
+
+    // file meta
+    el("file-meta").textContent = `${j.file_info?.path || ""} — ${filesize(j.file_info?.size_bytes)}`;
+    el("current-time").textContent = new Date().toLocaleString();
+
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const cls = el("class-filter").value;
+    const minProb = parseFloat(el("prob-filter").value) || 0;
+    const q = (el("search-filter").value || "").toLowerCase().trim();
+
+    let rows = allRows.slice();
+
+    if (cls !== "__all__") {
+      rows = rows.filter(r => String(r.pred_name) === cls);
+    }
+    rows = rows.filter(r => (r.pred_prob || 0) >= minProb);
+
+    if (q) {
+      rows = rows.filter(r => {
+        const hay = [
+          r.uid,
+          pick(r, ["id.orig_h","orig_h","src_ip"]),
+          pick(r, ["id.resp_h","resp_h","dst_ip"]),
+          pick(r, ["proto"]),
+          pick(r, ["_src"]),
+          String(r.pred_name || "")
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    // sort by ts desc
+    rows.sort((a,b) => (b.ts || 0) - (a.ts || 0));
+
+    // KPIs
+    el("kpi-rows").textContent = rows.length;
+    el("kpi-latest").textContent = rows.length ? fmtTime(rows[0].ts) : "-";
+    el("kpi-updated").textContent = new Date().toLocaleTimeString();
+    el("prob-val").textContent = minProb.toFixed(2);
+
+    // table
+    const tbody = el("tableBody");
+    tbody.innerHTML = "";
+    for (const r of rows.slice(0, 1000)) { // cap rows rendered for speed
+      const tr = document.createElement("tr");
+      tr.className = "hover:bg-gray-50";
+      tr.innerHTML = `
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${fmtTime(r.ts)}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${r.pred_name ?? "-"}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${r.pred_prob != null ? (r.pred_prob*100).toFixed(1) + "%" : "-"}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-600">${r.uid ?? "-"}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${srcText(r)}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${dstText(r)}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${protoText(r)}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500">${pick(r, ["_src"])}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  // events
+  el("refresh-btn").addEventListener("click", fetchAlerts);
+  el("clear-btn").addEventListener("click", () => {
+    el("class-filter").value = "__all__";
+    el("prob-filter").value = "0.50";
+    el("prob-val").textContent = "0.50";
+    el("search-filter").value = "";
+    applyFilters();
+  });
+  el("class-filter").addEventListener("change", applyFilters);
+  el("prob-filter").addEventListener("input", applyFilters);
+  el("search-filter").addEventListener("input", applyFilters);
+  el("limit").addEventListener("change", fetchAlerts);
+
+  setInterval(fetchAlerts, REFRESH_MS);
+  setInterval(() => {
+    document.getElementById("current-time").textContent = new Date().toLocaleString();
+  }, 1000);
+
+  fetchAlerts();
+</script>
+</body>
+</html>
